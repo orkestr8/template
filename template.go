@@ -71,11 +71,6 @@ type Options struct {
 	// Stderr is a function that returns stream to use for stderr
 	Stderr func() io.Writer `json:"-" yaml:"-"`
 
-	// MultiPass can affect the behavior of some functions like `var` where
-	// evaluation of the function return different results based on whether the
-	// template is meant to be evaluated in multiple passes.
-	MultiPass bool
-
 	// CacheDir is the location of the cache
 	CacheDir string
 
@@ -249,43 +244,13 @@ func (t *Template) Global(name string, value interface{}) *Template {
 	return t
 }
 
-// DeferVar returns a template expression for a var that isn't resolved at this iteration
-func (t *Template) DeferVar(name string) string {
-	dl := t.options.DelimLeft
-	dr := t.options.DelimRight
-	if dl == "" {
-		dl = "{{"
-	}
-	if dr == "" {
-		dr = "}}"
-	}
-	// Handling of optional parameter isn't possible here because by now the
-	// template engine has already done the variable expansions and we have full values.
-	// Cases like {{ var "my-var" $defaultValue }} will render to {{ var `my-var` }}.
-	// Also this will not work in the case of pipeline - like {{ $x | var "my-var" }} --
-	// which will just render to {{ var `my-var` }}
-	return fmt.Sprintf("%s var `%s` %s", dl, name, dr)
-}
-
 // Var implements the var function. It's a combination of global and ref
-// Note that the behavior of the var function depends on whether the template is used
-// in multiple passes where some var cannot be resolved to values in the first pass.
-// In this case, if the MultiplePass flag is set, the var function will just echo back
-// the same template expression in case of no value.
 func (t *Template) Var(name string, optional ...interface{}) (interface{}, error) {
-	base := t.doVar(name, optional...)
-
-	if !t.options.MultiPass {
-		if base == nil && t.options.MissingKey == MissingKeyError {
-			return nil, fmt.Errorf("Missing variable %s", name)
-		}
-		return base, nil
+	v := t.doVar(name, optional...)
+	if v == nil && t.options.MissingKey == MissingKeyError {
+		return nil, fmt.Errorf("Missing variable %s", name)
 	}
-
-	if base != nil {
-		return base, nil
-	}
-	return t.DeferVar(name), nil
+	return v, nil
 }
 
 // var implements the var function. It's a combination of global and ref
